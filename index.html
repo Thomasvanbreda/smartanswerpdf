@@ -452,6 +452,7 @@ function renderEditor(){
   const fc=tpl.pdfFields.length;
   document.getElementById('editor-subtitle').textContent=fc>0?`${fc} fillable field${fc!==1?'s':''} detected`:'No fillable fields detected — boxes will still work';
   renderBoxes();
+  checkDuplicateFields();
 }
 
 function renderBoxes(){
@@ -558,7 +559,7 @@ function updateBoxField(boxId,field,value){
   const tpl=getTemplate(); const box=tpl.boxes.find(b=>b.id===boxId); if(!box) return;
   box[field]=value; saveTemplate(tpl);
   if(field==='name'){const el=document.querySelector(`#box-${boxId} .box-title`);if(el)el.textContent=value||'Unnamed box';}
-  if(field==='pdfField') rerenderBoxes();
+  if(field==='pdfField'){ rerenderBoxes(); checkDuplicateFields(); }
 }
 
 function updateSegField(boxId,segId,field,value){
@@ -610,12 +611,42 @@ async function deleteBox(boxId){
   const el=document.getElementById('box-'+boxId);if(el)el.remove();
   tpl.boxes.forEach((box,bi)=>{const n=document.querySelector(`#box-${box.id} .box-num`);if(n)n.textContent=bi+1;});
 }
-function rerenderBoxes(){renderBoxes();}
+function rerenderBoxes(){renderBoxes(); checkDuplicateFields();}
+
+// ── DUPLICATE FIELD CHECK ────────────────────────────────────────────────────
+function checkDuplicateFields(){
+  const tpl=getTemplate(); if(!tpl) return;
+  const fieldCount={};
+  tpl.boxes.forEach(box=>{ if(box.pdfField) fieldCount[box.pdfField]=(fieldCount[box.pdfField]||0)+1; });
+  const dupes=Object.entries(fieldCount).filter(([f,n])=>n>1).map(([f])=>f);
+  let banner=document.getElementById('dupe-field-banner');
+  if(dupes.length){
+    if(!banner){
+      banner=document.createElement('div');
+      banner.id='dupe-field-banner';
+      banner.style.cssText='background:#fff0f3;border:1px solid #f4a0b0;border-radius:var(--radius);padding:10px 14px;font-size:13px;color:#8b1a2e;display:flex;align-items:flex-start;gap:10px;';
+      const editorEl=document.getElementById('editor');
+      editorEl.insertBefore(banner,editorEl.children[1]);
+    }
+    banner.innerHTML=`<span style="font-size:18px;flex-shrink:0;">⚠️</span><div><b>Duplicate PDF field mapping detected</b><br/>The following PDF fields are mapped to more than one box — only the last one will write to the PDF:<br/><span style="font-family:monospace;">${dupes.map(d=>`"${escHtml(d)}"`).join(', ')}</span></div>`;
+    banner.style.display='flex';
+  } else {
+    if(banner) banner.style.display='none';
+  }
+}
 
 // ── FILL SCREEN ─────────────────────────────────────────────────────────────
 let fillAnswers={};
 function openFillScreen(){
-  const tpl=getTemplate(); fillAnswers={}; showScreen('fill');
+  const tpl=getTemplate();
+  // Check for duplicate fields before opening
+  const fieldCount={};
+  tpl.boxes.forEach(box=>{ if(box.pdfField) fieldCount[box.pdfField]=(fieldCount[box.pdfField]||0)+1; });
+  const dupes=Object.entries(fieldCount).filter(([f,n])=>n>1).map(([f])=>f);
+  if(dupes.length){
+    if(!confirm(`⚠️ Warning: The following PDF fields are mapped to more than one box:\n\n${dupes.map(d=>`"${d}"`).join('\n')}\n\nOnly the last box mapped to each field will write to the PDF. Do you want to continue anyway?`)) return;
+  }
+  fillAnswers={}; showScreen('fill');
   document.getElementById('fill-title').textContent=tpl.name;
   const c=document.getElementById('fill-boxes'); c.innerHTML='';
   tpl.boxes.forEach((box,bi)=>{
