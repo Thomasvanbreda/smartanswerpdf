@@ -592,14 +592,27 @@ function buildSentencePreview(box){
 function updateBoxField(boxId,field,value){
   const tpl=getTemplate(); const box=tpl.boxes.find(b=>b.id===boxId); if(!box) return;
   box[field]=value; saveTemplate(tpl);
-  if(field==='name'){const el=document.querySelector(`#box-${boxId} .box-title`);if(el)el.textContent=value||'Unnamed box';}
-  if(field==='pdfField'){ rerenderBoxes(); checkDuplicateFields(); }
+  if(field==='name'){
+    const el=document.querySelector(`#box-${boxId} .box-title`);
+    if(el) el.textContent=value||'Unnamed box';
+    // Also update field tag
+    const ft=document.querySelector(`#box-${boxId} .box-field-tag em`);
+    if(ft) ft.textContent=box.pdfField||'not mapped';
+  }
+  if(field==='pdfField'){
+    // Update just the field tag, don't rebuild everything
+    const ft=document.querySelector(`#box-${boxId} .box-field-tag em`);
+    if(ft) ft.textContent=value||'not mapped';
+    checkDuplicateFields();
+  }
 }
 
 function updateSegField(boxId,segId,field,value){
   const tpl=getTemplate(); const box=tpl.boxes.find(b=>b.id===boxId); const seg=box&&box.segments.find(s=>s.id===segId); if(!seg) return;
   if(field==='options') seg.options=value.split('\n').filter(l=>l.trim()); else seg[field]=value;
   saveTemplate(tpl);
+  // Only full rerender when input type changes (need new UI controls)
+  if(field==='inputType'){ rerenderBoxes(); return; }
   const prev=document.getElementById('preview-'+boxId); if(prev) prev.innerHTML=buildSentencePreview(box);
 }
 
@@ -625,8 +638,10 @@ async function deleteSeg(boxId,segId){
 }
 
 async function toggleBox(boxId){
-  const tpl=getTemplate(); const box=tpl.boxes.find(b=>b.id===boxId);
-  box.open=!box.open; await saveTemplateNow(tpl);
+  // Instant — just update DOM and memory, no cloud save needed for open/closed state
+  const tpl=getTemplate(); const box=tpl.boxes.find(b=>b.id===boxId); if(!box) return;
+  box.open=!box.open;
+  saveTemplateLocal(tpl); // memory only, no network call
   const body=document.getElementById('body-'+boxId);const chev=document.getElementById('chev-'+boxId);
   if(body)body.classList.toggle('hidden',!box.open);if(chev)chev.classList.toggle('open',box.open);
 }
@@ -651,7 +666,7 @@ function rerenderBoxes(){renderBoxes(); checkDuplicateFields();}
 function checkDuplicateFields(){
   const tpl=getTemplate(); if(!tpl) return;
   const fieldCount={};
-  tpl.boxes.forEach(box=>{ if(box.pdfField) fieldCount[box.pdfField]=(fieldCount[box.pdfField]||0)+1; });
+  tpl.boxes.forEach(box=>{ if(box.pdfField && box.pdfField!=='__custom__') fieldCount[box.pdfField]=(fieldCount[box.pdfField]||0)+1; });
   const dupes=Object.entries(fieldCount).filter(([f,n])=>n>1).map(([f])=>f);
   let banner=document.getElementById('dupe-field-banner');
   if(dupes.length){
