@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 
-const PAYFAST_MERCHANT_ID = '34676581';
+const PAYFAST_MERCHANT_ID = process.env.PAYFAST_MERCHANT_ID || '34676581';
 const PAYFAST_MERCHANT_KEY = process.env.PAYFAST_MERCHANT_KEY;
 const PAYFAST_PASSPHRASE = process.env.PAYFAST_PASSPHRASE;
 
