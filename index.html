@@ -156,6 +156,13 @@
   .toast { position: fixed; bottom: 2rem; right: 2rem; background: var(--ink); color: white; padding: 10px 18px; border-radius: var(--radius); font-size: 13px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 999; }
   .toast.show { opacity: 1; }
   .mapping-select { padding: 7px 10px; border: 1px solid var(--rule); border-radius: var(--radius); font-family: inherit; font-size: 12px; background: var(--white); color: var(--ink); outline: none; flex: 1; }
+  /* PAYWALL */
+  .paywall-banner { background: linear-gradient(135deg, #0d2d6e, #1a5fa8); color: white; border-radius: 12px; padding: 20px 24px; margin: 1.5rem 2rem 0; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .paywall-banner h3 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .paywall-banner p { font-size: 12px; opacity: 0.85; }
+  .btn-upgrade { padding: 10px 20px; background: white; color: #0d2d6e; border: none; border-radius: var(--radius); font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; transition: opacity 0.2s; }
+  .btn-upgrade:hover { opacity: 0.9; }
+  .nav-badge { font-size: 11px; background: #1a5fa8; color: white; padding: 3px 8px; border-radius: 20px; }
 </style>
 </head>
 <body>
@@ -209,7 +216,9 @@
   <nav class="topnav">
     <div class="nav-logo">SmartAnswerPDF</div>
     <div class="nav-user">
+      <span id="nav-sub-badge"></span>
       <span id="nav-user-name"></span>
+      <span id="nav-upgrade-btn" style="display:none;" class="btn-upgrade" onclick="startCheckout()" style="padding:5px 12px;font-size:12px;">Upgrade — R49.99/mo</span>
       <span class="nav-logout" onclick="doLogout()">Sign out</span>
     </div>
   </nav>
@@ -312,6 +321,7 @@ const SUPABASE_KEY = 'sb_publishable_o80d7JVDWB8N6ng1onp2yg_ZGkLKib0';
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let currentUser=null, activeTemplateId=null, templates={}, pendingPdfBytes=null, pendingPdfName='';
+let userSubscription='free'; // 'free' or 'active'
 
 // ── DEBOUNCE: waits 600ms after last keystroke before saving ────────────────
 const debounceTimers = {};
@@ -328,6 +338,12 @@ async function init() {
     showScreen('auth');
     switchTab('reset');
     return;
+  }
+  // Check if returning from PayFast
+  const urlParams=new URLSearchParams(window.location.search);
+  if(urlParams.get('payment')==='success'){
+    showToast('Payment successful! Your Pro subscription is now active.');
+    window.history.replaceState({},document.title,window.location.pathname);
   }
   const { data: { session } } = await sb.auth.getSession();
   if (session) { currentUser=session.user; await enterApp(session.user); }
@@ -360,7 +376,7 @@ async function doForgotPassword(){
   const email=document.getElementById('forgot-email').value.trim().toLowerCase();
   if(!email) return setMsg('Please enter your email address.');
   const btn=document.getElementById('forgot-btn'); btn.disabled=true; btn.textContent='Sending...';
-  const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:'https://smartanswerpdf.netlify.app'});
+  const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:'https://smartanswerpdf.com'});
   btn.disabled=false; btn.textContent='Send reset link';
   if(error) return setMsg(error.message);
   setMsg('Reset link sent! Check your email inbox.',true);
@@ -407,6 +423,19 @@ async function doLogout(){await sb.auth.signOut();}
 async function enterApp(user) {
   const name=user.user_metadata?.name||user.email.split('@')[0];
   document.getElementById('nav-user-name').textContent=name;
+  // Load subscription status
+  const {data:profile}=await sb.from('profiles').select('subscription_status').eq('id',user.id).single();
+  userSubscription=profile?.subscription_status||'free';
+  // Show upgrade button if on free plan
+  const upgradeBtn=document.getElementById('nav-upgrade-btn');
+  const badge=document.getElementById('nav-sub-badge');
+  if(userSubscription==='active'){
+    upgradeBtn.style.display='none';
+    badge.innerHTML='<span class="nav-badge">Pro</span>';
+  } else {
+    upgradeBtn.style.display='inline-block';
+    badge.innerHTML='<span class="nav-badge" style="background:#e0f0fa;color:#0d2d6e;">Free</span>';
+  }
   await loadTemplates(); renderSidebar(); showScreen('app');
 }
 
@@ -423,6 +452,12 @@ async function cloudDelete(id){await sb.from('templates').delete().eq('id',id).e
 
 function handlePdfUpload(e) {
   const file=e.target.files[0]; if(!file) return;
+  // PAYWALL CHECK — block if free user already has 1 template
+  if(userSubscription!=='active' && Object.keys(templates).length>=1){
+    e.target.value='';
+    showPaywall();
+    return;
+  }
   const reader=new FileReader();
   reader.onload=async ev=>{
     pendingPdfBytes=ev.target.result;
@@ -431,6 +466,63 @@ function handlePdfUpload(e) {
     document.getElementById('new-tpl-modal').classList.add('open');
   };
   reader.readAsArrayBuffer(file); e.target.value='';
+}
+
+function showPaywall(){
+  // Remove existing paywall if any
+  const existing=document.getElementById('paywall-banner');
+  if(existing) existing.remove();
+  const banner=document.createElement('div');
+  banner.id='paywall-banner';
+  banner.className='paywall-banner';
+  banner.innerHTML=`
+    <div>
+      <h3>You've used your free template</h3>
+      <p>Upgrade to SmartAnswerPDF Pro for unlimited templates — R49.99/month</p>
+    </div>
+    <button class="btn-upgrade" onclick="startCheckout()">Upgrade now</button>`;
+  const editorArea=document.getElementById('editor-area');
+  editorArea.insertBefore(banner, editorArea.firstChild);
+}
+
+function startCheckout(){
+  if(!currentUser) return;
+  // Build PayFast payment form and submit
+  const merchantId='34676581';
+  const returnUrl='https://smartanswerpdf.com?payment=success';
+  const cancelUrl='https://smartanswerpdf.com?payment=cancelled';
+  const notifyUrl='https://smartanswerpdf.com/.netlify/functions/payfast-itn';
+  const amount='49.99';
+  const itemName='SmartAnswerPDF Pro - Monthly Subscription';
+  const form=document.createElement('form');
+  form.method='POST';
+  form.action='https://www.payfast.co.za/eng/process';
+  form.style.display='none';
+  const fields={
+    merchant_id: merchantId,
+    merchant_key: 'YOUR_MERCHANT_KEY_HERE', // Required by PayFast form
+    return_url: returnUrl,
+    cancel_url: cancelUrl,
+    notify_url: notifyUrl,
+    name_first: currentUser.user_metadata?.name?.split(' ')[0]||'',
+    name_last: currentUser.user_metadata?.name?.split(' ').slice(1).join(' ')||'',
+    email_address: currentUser.email,
+    amount: amount,
+    item_name: itemName,
+    subscription_type: '1',
+    billing_date: new Date().toISOString().split('T')[0],
+    recurring_amount: amount,
+    frequency: '3',
+    cycles: '0',
+    custom_str1: currentUser.id,
+  };
+  Object.entries(fields).forEach(([k,v])=>{
+    const input=document.createElement('input');
+    input.type='hidden'; input.name=k; input.value=v;
+    form.appendChild(input);
+  });
+  document.body.appendChild(form);
+  form.submit();
 }
 async function getPDFFields(buf){try{const{PDFDocument}=PDFLib;const d=await PDFDocument.load(buf,{ignoreEncryption:true});return d.getForm().getFields().map(f=>f.getName());}catch{return[];}}
 function closeModal(){document.getElementById('new-tpl-modal').classList.remove('open');pendingPdfBytes=null;}
