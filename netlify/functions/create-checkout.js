@@ -6,8 +6,8 @@ const PAYFAST_PASSPHRASE = process.env.PAYFAST_PASSPHRASE;
 
 function generateSignature(data, passphrase) {
   let str = Object.keys(data)
-    .filter(k => k !== 'signature' && data[k] !== '' && data[k] !== null && data[k] !== undefined)
-    .map(k => `${k}=${encodeURIComponent(String(data[k])).replace(/%20/g, '+')}`)
+    .filter(k => k !== 'signature')
+    .map(k => `${k}=${encodeURIComponent(String(data[k] ?? '')).replace(/%20/g, '+')}`)
     .join('&');
   if (passphrase) str += `&passphrase=${encodeURIComponent(passphrase).replace(/%20/g, '+')}`;
   return crypto.createHash('md5').update(str).digest('hex');
@@ -17,15 +17,12 @@ exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method not allowed' };
   }
-
   try {
     const body = JSON.parse(event.body);
     const { userId, email, firstName, lastName } = body;
-
     if (!userId || !email) {
       return { statusCode: 400, body: JSON.stringify({ error: 'Missing required fields' }) };
     }
-
     const data = {
       merchant_id: PAYFAST_MERCHANT_ID,
       merchant_key: PAYFAST_MERCHANT_KEY,
@@ -44,9 +41,7 @@ exports.handler = async (event) => {
       cycles: '0',
       custom_str1: userId,
     };
-
     data.signature = generateSignature(data, PAYFAST_PASSPHRASE);
-
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },

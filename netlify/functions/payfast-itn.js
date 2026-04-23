@@ -1,19 +1,16 @@
 const https = require('https');
 const crypto = require('crypto');
 
-// ── CONFIG — values come from Netlify Environment Variables ─────────────────
-const PAYFAST_MERCHANT_ID = '34676581';
+const PAYFAST_MERCHANT_ID = process.env.PAYFAST_MERCHANT_ID;
 const PAYFAST_MERCHANT_KEY = process.env.PAYFAST_MERCHANT_KEY;
 const PAYFAST_PASSPHRASE = process.env.PAYFAST_PASSPHRASE;
 const SUPABASE_URL = 'https://dvuatrfhvwnmmqxdsaxx.supabase.co';
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 
-// ── HELPERS ─────────────────────────────────────────────────────────────────
 function generateSignature(data, passphrase) {
   let str = Object.keys(data)
-    .filter(k => k !== 'signature' && data[k] !== '')
-    .sort()
-    .map(k => `${k}=${encodeURIComponent(data[k]).replace(/%20/g, '+')}`)
+    .filter(k => k !== 'signature')
+    .map(k => `${k}=${encodeURIComponent(String(data[k] ?? '')).replace(/%20/g, '+')}`)
     .join('&');
   if (passphrase) str += `&passphrase=${encodeURIComponent(passphrase).replace(/%20/g, '+')}`;
   return crypto.createHash('md5').update(str).digest('hex');
@@ -48,12 +45,10 @@ async function supabaseUpdate(userId, status, token) {
   });
 }
 
-// ── MAIN HANDLER ─────────────────────────────────────────────────────────────
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method not allowed' };
   }
-
   try {
     const params = Object.fromEntries(new URLSearchParams(event.body));
 
