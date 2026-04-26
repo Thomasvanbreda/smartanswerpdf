@@ -395,8 +395,13 @@ async function init() {
   if (session) { currentUser=session.user; await enterApp(session.user); }
   else showScreen('auth');
   sb.auth.onAuthStateChange(async (event,session) => {
-    if (event==='SIGNED_IN'&&session) { currentUser=session.user; await enterApp(session.user); }
-    else if (event==='SIGNED_OUT') { currentUser=null; templates={}; activeTemplateId=null; showScreen('auth'); }
+    if (event==='SIGNED_IN' && session && !currentUser) {
+      currentUser=session.user; await enterApp(session.user);
+    } else if (event==='TOKEN_REFRESHED' && session) {
+      currentUser=session.user; // silently update user, no re-render
+    } else if (event==='SIGNED_OUT') {
+      currentUser=null; templates={}; activeTemplateId=null; showScreen('auth');
+    }
   });
 }
 
