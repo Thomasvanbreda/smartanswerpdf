@@ -472,6 +472,7 @@ async function doLogin() {
 async function doLogout(){await sb.auth.signOut();}
 
 async function enterApp(user) {
+  document.getElementById('nav-admin-btn').style.display='none';
   const name=user.user_metadata?.name||user.email.split('@')[0];
   document.getElementById('nav-user-name').textContent=name;
   // Load subscription status
