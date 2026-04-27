@@ -1176,14 +1176,26 @@ async function doDeleteAccount(){
   const btn=document.getElementById('delete-account-btn');
   btn.textContent='Deleting...'; btn.disabled=true;
   try {
-    // Delete all templates first
-    await sb.from('templates').delete().eq('user_id', currentUser.id);
-    // Delete profile
-    await sb.from('profiles').delete().eq('id', currentUser.id);
-    // Sign out — Supabase Auth user deletion requires admin/service key
-    // so we delete their data and sign them out; auth record cleaned separately
+    // Get the current session token to authenticate the request
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) throw new Error('No session');
+
+    // Call our server-side function which uses the service key to fully delete
+    const resp = await fetch('/.netlify/functions/delete-account', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + session.access_token
+      },
+      body: JSON.stringify({ userId: currentUser.id })
+    });
+
+    const result = await resp.json();
+    if (!result.success) throw new Error(result.error || 'Delete failed');
+
+    // Sign out locally and redirect to auth screen
     await sb.auth.signOut();
-    showToast('Account deleted. Sorry to see you go.');
+    showToast('Account fully deleted. Sorry to see you go.');
     closeDeleteAccountModal();
   } catch(err) {
     btn.textContent='Delete my account'; btn.disabled=false; btn.style.opacity='1';
