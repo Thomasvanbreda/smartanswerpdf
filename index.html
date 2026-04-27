@@ -290,6 +290,7 @@
       <span id="nav-user-name"></span>
       <span id="nav-admin-btn" style="display:none;font-size:13px;color:var(--ink3);cursor:pointer;border:1px solid var(--rule);border-radius:20px;padding:4px 12px;" onclick="toggleAdminPanel()">Admin</span>
       <span id="nav-upgrade-btn" style="display:none;" class="btn-upgrade" onclick="startCheckout()" style="padding:5px 12px;font-size:12px;">Upgrade — R49.99/mo</span>
+      <span class="nav-logout" onclick="openChangePasswordModal()" style="cursor:pointer;">Change password</span>
       <span class="nav-logout" onclick="doLogout()">Sign out</span>
     </div>
   </nav>
@@ -406,6 +407,25 @@
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeDupeModal()">Cancel</button>
       <button class="btn-confirm" onclick="confirmDuplicate()">Create copy</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="change-password-modal">
+  <div class="modal">
+    <h3>Change password</h3>
+    <p>Enter a new password for your account.</p>
+    <div class="field-group">
+      <label>New password</label>
+      <input type="password" id="change-pw-input" placeholder="Min. 6 characters"/>
+    </div>
+    <div class="field-group">
+      <label>Confirm new password</label>
+      <input type="password" id="change-pw2-input" placeholder="Repeat password"/>
+    </div>
+    <div class="auth-msg" id="change-pw-msg"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeChangePasswordModal()">Cancel</button>
+      <button class="btn-confirm" onclick="doChangePassword()">Update password</button>
     </div>
   </div>
 </div>
@@ -537,8 +557,7 @@ async function doLogout(){await sb.auth.signOut();}
 
 async function enterApp(user) {
   document.getElementById('nav-admin-btn').style.display='none';
-  const name=user.user_metadata?.name||user.email.split('@')[0];
-  document.getElementById('nav-user-name').textContent=name;
+  document.getElementById('nav-user-name').textContent=user.email;
   // Load subscription status
   const {data:profile}=await sb.from('profiles').select('subscription_status').eq('id',user.id).single();
   userSubscription=profile?.subscription_status||'free';
@@ -1157,6 +1176,29 @@ async function adminSetStatusByEmail(email, status){
     result.className = 'admin-result success';
     setTimeout(()=>loadAdminUsers(), 500);
   }
+}
+
+// ── CHANGE PASSWORD ──────────────────────────────────────────────────────────
+function openChangePasswordModal(){
+  document.getElementById('change-pw-input').value='';
+  document.getElementById('change-pw2-input').value='';
+  document.getElementById('change-pw-msg').textContent='';
+  document.getElementById('change-password-modal').classList.add('open');
+}
+function closeChangePasswordModal(){
+  document.getElementById('change-password-modal').classList.remove('open');
+}
+async function doChangePassword(){
+  const pw=document.getElementById('change-pw-input').value;
+  const pw2=document.getElementById('change-pw2-input').value;
+  const msg=document.getElementById('change-pw-msg');
+  if(!pw||!pw2){msg.textContent='Please fill in both fields.';msg.style.color='var(--danger)';return;}
+  if(pw.length<6){msg.textContent='Password must be at least 6 characters.';msg.style.color='var(--danger)';return;}
+  if(pw!==pw2){msg.textContent='Passwords do not match.';msg.style.color='var(--danger)';return;}
+  const {error}=await sb.auth.updateUser({password:pw});
+  if(error){msg.textContent=error.message;msg.style.color='var(--danger)';return;}
+  msg.textContent='Password updated successfully!';msg.style.color='#065F46';
+  setTimeout(()=>closeChangePasswordModal(),1500);
 }
 
 function escHtml(str){return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
