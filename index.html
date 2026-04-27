@@ -301,8 +301,9 @@
         <input type="file" id="pdf-upload" accept=".pdf" onchange="handlePdfUpload(event)"/>
         <div class="upload-zone-text"><strong>+ Upload PDF</strong>Drag or click to add template</div>
       </div>
-      <div style="margin-top:auto;padding:12px 8px 4px;border-top:1px solid var(--rule);">
-        <a href="/privacy.html" target="_blank" style="font-size:11px;color:var(--ink3);text-decoration:none;display:block;text-align:center;transition:color 0.2s;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--ink3)'">Privacy Policy</a>
+      <div style="margin-top:auto;padding:12px 8px 4px;border-top:1px solid var(--rule);display:flex;justify-content:space-between;align-items:center;">
+        <a href="/privacy.html" target="_blank" style="font-size:11px;color:var(--ink3);text-decoration:none;transition:color 0.2s;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--ink3)'">Privacy Policy</a>
+        <span onclick="openDeleteAccountModal()" style="font-size:11px;color:var(--ink3);cursor:pointer;transition:color 0.2s;" onmouseover="this.style.color='#EF4444'" onmouseout="this.style.color='var(--ink3)'">Delete account</span>
       </div>
     </div>
     <div id="editor-area" style="flex:1;overflow-y:auto;">
@@ -405,6 +406,20 @@
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeDupeModal()">Cancel</button>
       <button class="btn-confirm" onclick="confirmDuplicate()">Create copy</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="delete-account-modal">
+  <div class="modal">
+    <h3>Delete your account</h3>
+    <p>This will permanently delete your account and all your templates. This action cannot be undone.</p>
+    <div class="field-group">
+      <label>Type DELETE to confirm</label>
+      <input type="text" id="delete-confirm-input" placeholder="DELETE" oninput="document.getElementById('delete-account-btn').disabled=this.value!=='DELETE'"/>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeDeleteAccountModal()">Cancel</button>
+      <button id="delete-account-btn" disabled onclick="doDeleteAccount()" style="padding:9px 20px;background:linear-gradient(135deg,#EF4444,#DC2626);color:white;border:none;border-radius:50px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;opacity:0.5;transition:all 0.2s;" onmouseover="if(!this.disabled)this.style.opacity='0.85'" onmouseout="this.style.opacity=this.disabled?'0.5':'1'">Delete my account</button>
     </div>
   </div>
 </div>
@@ -1146,6 +1161,36 @@ async function adminSetStatusByEmail(email, status){
 
 function escHtml(str){return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
+
+// ── DELETE ACCOUNT ────────────────────────────────────────────────────────────
+function openDeleteAccountModal(){
+  document.getElementById('delete-confirm-input').value='';
+  document.getElementById('delete-account-btn').disabled=true;
+  document.getElementById('delete-account-btn').style.opacity='0.5';
+  document.getElementById('delete-account-modal').classList.add('open');
+}
+function closeDeleteAccountModal(){
+  document.getElementById('delete-account-modal').classList.remove('open');
+}
+async function doDeleteAccount(){
+  const btn=document.getElementById('delete-account-btn');
+  btn.textContent='Deleting...'; btn.disabled=true;
+  try {
+    // Delete all templates first
+    await sb.from('templates').delete().eq('user_id', currentUser.id);
+    // Delete profile
+    await sb.from('profiles').delete().eq('id', currentUser.id);
+    // Sign out — Supabase Auth user deletion requires admin/service key
+    // so we delete their data and sign them out; auth record cleaned separately
+    await sb.auth.signOut();
+    showToast('Account deleted. Sorry to see you go.');
+    closeDeleteAccountModal();
+  } catch(err) {
+    btn.textContent='Delete my account'; btn.disabled=false; btn.style.opacity='1';
+    showToast('Error deleting account. Please contact support@smartanswerpdf.com');
+    console.error(err);
+  }
+}
 
 init();
 </script>
